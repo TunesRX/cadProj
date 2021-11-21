@@ -150,6 +150,7 @@ int main(int argc, char *argv[]) {
 			areaFilter(out,img, l,c, imgw, imgh, filter);
 		}
 	}
+    printImg(imgw, imgh, out);
     for (int l=0; l<imgh; l++) {
         for (int c=0; c<imgw; c++) {
             pointFilter(out,out, l,c, imgw, imgh, alpha);
@@ -158,7 +159,7 @@ int main(int argc, char *argv[]) {
     t = clock()-t;
     printf("time %f ms\n", t/(double)(CLOCKS_PER_SEC/1000));
 
-    // printImg(imgw, imgh, out);
+    printImg(imgw, imgh, out);
     FILE *g=fopen("out.ppm", "w");
     write_ppm(g, out, imgw, imgh, imgc);
     fclose(g);
