@@ -93,6 +93,7 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
   int line = blockIdx.x;
   int col = threadIdx.x;
   int r = 0, g = 0, b = 0, n = 0;
+  //
   for (int l = line - 1; l < line + 2 && l < imgh; l++)
     for (int c = col - 1; c < col + 2 && c < imgw; c++)
       if (l >= 0 && c >= 0) {
@@ -112,26 +113,6 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
 // [][][]
 // [][][]
 // [][][]
-
-void areaFilter(int *out, int *img, int line, int col, int width, int height,
-                int filter[3][3]) {
-  int r = 0, g = 0, b = 0, n = 0;
-  for (int l = line - 1; l < line + 2 && l < height; l++)
-    for (int c = col - 1; c < col + 2 && c < width; c++)
-      if (l >= 0 && c >= 0) {
-        int idx = 3 * (l * width + c);
-        int scale = filter[l - line + 1][c - col + 1];
-
-        r += scale * img[idx];
-        g += scale * img[idx + 1];
-        b += scale * img[idx + 2];
-        n += scale;
-      }
-  int idx = 3 * (line * width + col);
-  out[idx] = r / n; // normalize value
-  out[idx + 1] = g / n;
-  out[idx + 2] = b / n;
-}
 
 /* pointFilter - transform a point (line,col) with greyscale
  *          newcolor = alpha*grey(color) +(1-alpha)*color
