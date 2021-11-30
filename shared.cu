@@ -73,7 +73,7 @@ void write_ppm(FILE *f, int *img, int width, int height, int maxcolors) {
     putc('\n', f);
   }
 }
-
+// testteee
 /* printImg - print to screen the content of img
  */
 void printImg(int imgw, int imgh, const int *img) {
