@@ -90,25 +90,29 @@ void printImg(int imgw, int imgh, const int *img) {
  */
 __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
                            int *filter) {
-  int line = blockIdx.x;
-  int col = threadIdx.x;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int line = blockIdx.y * blockDim.y + threadIdx.y;
   int r = 0, g = 0, b = 0, n = 0;
-  //
-  for (int l = line - 1; l < line + 2 && l < imgh; l++)
-    for (int c = col - 1; c < col + 2 && c < imgw; c++)
-      if (l >= 0 && c >= 0) {
-        int idx = 3 * (l * imgw + c);
-        // int scale = filter[l - line + 1][c - col + 1];
-        int scale = filter[c - col + 1 + (l - line + 1) * 3];
-        r += scale * img[idx];
-        g += scale * img[idx + 1];
-        b += scale * img[idx + 2];
-        n += scale;
+  if (col < imgw && line < imgh) {
+    //
+    for (int l = line - 1; l < line + 2 && l < imgh; l++)
+      for (int c = col - 1; c < col + 2 && c < imgw; c++) {
+        if (l >= 0 && c >= 0) {
+          int idx = 3 * (l * imgw + c);
+          int scale = filter[c - col + 1 + (l - line + 1) * 3];
+          r += scale * img[idx];
+          g += scale * img[idx + 1];
+          b += scale * img[idx + 2];
+          n += scale;
+        }
       }
-  int idx = 3 * (line * imgw + col);
-  out[idx] = r / n; // normalize value
-  out[idx + 1] = g / n;
-  out[idx + 2] = b / n;
+
+    int idx = 3 * (line * imgw + col);
+
+    out[idx] = r / n; // normalize value
+    out[idx + 1] = g / n;
+    out[idx + 2] = b / n;
+  }
 }
 // [][][]
 // [][][]
@@ -120,18 +124,23 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
  */
 __global__ void pointFilter(int *out, int *img, int imgw, int imgh,
                             float alpha) {
-  int line = blockIdx.x;
-  int col = threadIdx.x;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int line = blockIdx.y * blockDim.y + threadIdx.y;
   int r = 0, g = 0, b = 0;
   float grey;
-  int idx = 3 * (line * imgw + col);
-  r = img[idx];
-  g = img[idx + 1];
-  b = img[idx + 2];
-  grey = alpha * (0.3 * r + 0.59 * g + 0.11 * b);
-  out[idx] = (1 - alpha) * r + grey;
-  out[idx + 1] = (1 - alpha) * g + grey;
-  out[idx + 2] = (1 - alpha) * b + grey;
+  if (line < imgh && col < imgw) {
+    int idx = 3 * (line * imgw + col);
+    // if(threadIdx.x ==0&& threadIdx.y==0){
+    // printf(" ii r %d  g %d b %d \n", img[idx],img[idx+1], img[idx+2]);
+    //}
+    r = img[idx];
+    g = img[idx + 1];
+    b = img[idx + 2];
+    grey = alpha * (0.3 * r + 0.59 * g + 0.11 * b);
+    out[idx] = (1 - alpha) * r + grey;
+    out[idx + 1] = (1 - alpha) * g + grey;
+    out[idx + 2] = (1 - alpha) * b + grey;
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -141,6 +150,10 @@ int main(int argc, char *argv[]) {
   int filter[3][3] = {{1, 2, 1}, // gaussian filter
                       {2, 4, 2},
                       {1, 2, 1}};
+
+  /*int filter[3][3] = {{1, 2, 3}, // gaussian filter
+                      {4, 5, 6},
+                      {7, 8, 9}};*/
   if (argc != 2 && argc != 3) {
     fprintf(stderr, "usage: %s img.ppm [alpha]\n", argv[0]);
     return EXIT_FAILURE;
@@ -155,8 +168,8 @@ int main(int argc, char *argv[]) {
   }
 
   read_ppm(f, &img, &imgw, &imgh, &imgc);
-  printf("PPM image %dx%dx%d\n", imgw, imgh, imgc);
-  printImg(imgw, imgh, img);
+  // printf("PPM image %dx%dx%d\n", imgw, imgh, imgc);
+  // printImg(imgw, imgh, img);
 
   int *out = (int *)malloc(3 * imgw * imgh * sizeof(int));
   assert(out != NULL);
@@ -172,6 +185,10 @@ int main(int argc, char *argv[]) {
   int *d_c;
   cudaMalloc(&d_c, 3 * imgw * imgh * sizeof(int));
 
+  dim3 blockSize(32, 32); // Equivalent to dim3 blockSize(TX, TY, 1);
+  int bx = (imgw + blockSize.x - 1) / blockSize.x;
+  int by = (imgh + blockSize.y - 1) / blockSize.y;
+  dim3 gridSize = dim3(bx, by);
   if (d_a == NULL || d_b == NULL) {
     fprintf(stderr, "No GPU mem!\n");
     return EXIT_FAILURE;
@@ -180,26 +197,15 @@ int main(int argc, char *argv[]) {
   cudaMemcpy(d_a, img, 3 * imgw * imgh * sizeof(int), cudaMemcpyHostToDevice);
   cudaMemcpy(d_filter, filter, 3 * 3 * sizeof(int), cudaMemcpyHostToDevice);
 
-  areaFilter<<<imgh, imgw>>>(d_b, d_a, imgw, imgh, d_filter);
+  areaFilter<<<gridSize, blockSize>>>(d_b, d_a, imgw, imgh, d_filter);
 
-  /*for (int l = 0; l < imgh; l++) {
-    for (int c = 0; c < imgw; c++) {
-      areaFilter(out, img, l, c, imgw, imgh, filter);
-    }
-  }*/
-  cudaMemcpy(out, d_b, 3 * imgw * imgh * sizeof(int), cudaMemcpyDeviceToHost);
-  printImg(imgw, imgh, out);
-
-  // cudaMemcpy(d_a, out, 3 * imgw * imgh * sizeof(int),
-  // cudaMemcpyHostToDevice);
-
-  pointFilter<<<imgh, imgw>>>(d_c, d_b, imgw, imgh, alpha);
+  pointFilter<<<gridSize, blockSize>>>(d_c, d_b, imgw, imgh, alpha);
 
   cudaMemcpy(out, d_c, 3 * imgw * imgh * sizeof(int), cudaMemcpyDeviceToHost);
   t = clock() - t;
   printf("time %f ms\n", t / (double)(CLOCKS_PER_SEC / 1000));
 
-  printImg(imgw, imgh, out);
+  // printImg(imgw, imgh, out);
   FILE *g = fopen("out.ppm", "w");
   write_ppm(g, out, imgw, imgh, imgc);
   fclose(g);
