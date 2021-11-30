@@ -73,7 +73,7 @@ void write_ppm(FILE *f, int *img, int width, int height, int maxcolors) {
     putc('\n', f);
   }
 }
-// testteee
+
 /* printImg - print to screen the content of img
  */
 void printImg(int imgw, int imgh, const int *img) {
@@ -85,7 +85,7 @@ void printImg(int imgw, int imgh, const int *img) {
     putchar('\n');
   }
 }
-__device__ void updateArray(int *src, int dst[10][10][3], int idxSrc,
+__device__ void updateArray(int *src, int dst[34][34][3], int idxSrc,
                             int idyDst, int idxDst) {
   dst[idyDst][idxDst][0] = src[idxSrc];
   dst[idyDst][idxDst][1] = src[idxSrc + 1];
@@ -100,33 +100,19 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
 
   // int line;
   // int col;
-  const int sharedSz = 10;
-  const int nThreads = 8;
+  const int sharedSz = 34;
 
   __shared__ int temp[sharedSz][sharedSz][3];
 
-  int nbW = (imgw + blockDim.x - 1) / blockDim.x;
-  int nbH = (imgh + blockDim.y - 1) / blockDim.y;
-
   int col = blockIdx.x * blockDim.x + threadIdx.x;
   int line = blockIdx.y * blockDim.y + threadIdx.y;
-
-  /*if (blockIdx.y == nbH -1)
-    line = imgh + threadIdx.y;
-
-  if (blockIdx.x == nbW -1)
-    col = imgw + threadIdx.x;*/
 
   if (line < imgh && col < imgw) {
 
     int tempLine = threadIdx.y + 1;
     int tempCol = threadIdx.x + 1;
     int idx = 3 * (line * imgw + col);
-    // printf("idx: %d tempidx: %d\n",idx,tempIdx);
-    // printf("idx: %d tempIdx: %d \n",idx,tempIdx);
     updateArray(img, temp, idx, tempLine, tempCol);
-    // if ( blockIdx.x==0 &&blockIdx.y==0)
-    // printf("idx: %d tempidx: %d\n",idx,tempIdx);
 
     // copia lado esquerdo
     if (threadIdx.x == 0 && blockIdx.x != 0) {
@@ -135,8 +121,6 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
       int idx = 3 * (line * imgw + (col - 1));
 
       updateArray(img, temp, idx, tempLine, tempCol);
-
-      // printf("esquerdo idx: %d tempidx: %d col: %d\n",idx,tempIdx,col);
     }
 
     // copia superior
@@ -145,29 +129,25 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
       tempCol = threadIdx.x + 1;
       tempLine = 0;
       updateArray(img, temp, idx, tempLine, tempCol);
-      // printf("SUPERIOR idx: %d tempidx: %d\n",idx,tempIdx);
     }
     // copia lado direito
     int nbW = (imgw + blockDim.x - 1) / blockDim.x;
-    if (threadIdx.x == nThreads - 1 && blockIdx.x != nbW - 1) {
+    if (threadIdx.x == blockDim.x - 1 && blockIdx.x != nbW - 1) {
       int idx = 3 * (line * imgw + (col + 1));
       tempCol = sharedSz - 1;
       tempLine = threadIdx.y + 1;
       updateArray(img, temp, idx, tempLine, tempCol);
-      // printf("direito idx: %d tempidx: %d col: %d\n",idx,tempIdx,col);
     }
     // copia lado inferior
     int nbH = (imgh + blockDim.y - 1) / blockDim.y;
-    if (threadIdx.y == nThreads - 1 && blockIdx.y != nbH - 1) {
+    if (threadIdx.y == blockDim.x - 1 && blockIdx.y != nbH - 1) {
       int idx = 3 * ((line + 1) * imgw + col);
       tempCol = threadIdx.x + 1;
       tempLine = sharedSz - 1;
       updateArray(img, temp, idx, tempLine, tempCol);
-      // printf("INFERIOR idx: %d tempidx: %d\n",idx,tempIdx);
     }
 
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-      int idtemp;
       int idx;
       if (line != 0 && col != 0) {
         idx = 3 * ((line - 1) * imgw + (col - 1));
@@ -175,7 +155,7 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
       }
 
       if (line != 0 && blockIdx.x != nbW - 1) {
-        idx = 3 * ((line - 1) * imgw + (nThreads + blockDim.x * blockIdx.x));
+        idx = 3 * ((line - 1) * imgw + (blockDim.x + blockDim.x * blockIdx.x));
         updateArray(img, temp, idx, 0, sharedSz - 1);
       }
 
@@ -187,13 +167,12 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
       if (blockIdx.y != nbH - 1 && blockIdx.x != nbW - 1) {
         idx = 3 * ((blockIdx.y * blockDim.y + blockDim.y) * imgw +
                    (blockDim.x + blockIdx.x * blockDim.x));
-        idtemp = 3 * ((nThreads + 1) * sharedSz + (nThreads + 1));
         updateArray(img, temp, idx, sharedSz - 1, sharedSz - 1);
       }
     }
-    int blockX = 0;
+    /*int blockX = 0;
     int blockY = 0;
-    /*if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x==blockX
+    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x==blockX
     &&blockIdx.y==blockY){ for(int i = 0; i < sharedSz; i++){ for( int j = 0; j
     < sharedSz; j ++){ printf("%d %d %d  ", temp[i][j][0],temp[i][j][1],
     temp[i][j][2]);
@@ -211,12 +190,7 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
 
         if (line1 > 0 && col2 > 0 && col2 <= imgw && line1 <= imgh) {
 
-          // int idx = 3 * ((threadIdx.y + 1 + l -line) * sharedSz + threadIdx.x
-          // + 1 +(c  - col));
-
           int scale = filter[c - threadIdx.x + (l - threadIdx.y) * 3];
-          // if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x==blockX
-          // &&blockIdx.y==blockY) printf(" scale pos : %d \n",scale);
           r += scale * temp[l][c][0];
           g += scale * temp[l][c][1];
           b += scale * temp[l][c][2];
@@ -224,26 +198,15 @@ __global__ void areaFilter(int *out, int *img, int imgw, int imgh,
         }
       }
 
-    // printf("line %d, col: %d, %d , %d, %d\n",line, col, r/n, g/n, b/n);
     idx = 3 * (line * imgw + col);
-    // int res[3]= {r/n,g/n,b/n};
     col = blockIdx.x * blockDim.x + threadIdx.x;
     line = blockIdx.y * blockDim.y + threadIdx.y;
     idx = 3 * (line * imgw + col);
     out[idx] = r / n;
     out[idx + 1] = g / n;
     out[idx + 2] = b / n;
-
-    // updateArray(res,out,0,idx);
-    // out[idx] = r / n; // normalize value
-    // out[idx + 1] = g / n;
-    // out[idx + 2] = b / n;
   }
 }
-
-// [][][]
-// [][][]
-// [][][]
 
 /* pointFilter - transform a point (line,col) with greyscale
  *          newcolor = alpha*grey(color) +(1-alpha)*color
@@ -309,7 +272,7 @@ int main(int argc, char *argv[]) {
   int *d_c;
   cudaMalloc(&d_c, 3 * imgw * imgh * sizeof(int));
 
-  dim3 blockSize(8, 8); // Equivalent to dim3 blockSize(TX, TY, 1);
+  dim3 blockSize(32, 32); // Equivalent to dim3 blockSize(TX, TY, 1);
   int bx = (imgw + blockSize.x - 1) / blockSize.x;
   int by = (imgh + blockSize.y - 1) / blockSize.y;
   dim3 gridSize = dim3(bx, by);
@@ -322,12 +285,6 @@ int main(int argc, char *argv[]) {
   cudaMemcpy(d_filter, filter, 3 * 3 * sizeof(int), cudaMemcpyHostToDevice);
 
   areaFilter<<<gridSize, blockSize>>>(d_b, d_a, imgw, imgh, d_filter);
-
-  // cudaMemcpy(out, d_b, 3 * imgw * imgh * sizeof(int),
-  // cudaMemcpyDeviceToHost);
-  // printImg(imgw, imgh, out);
-  // FILE *g = fopen("out.ppm", "w");
-  // write_ppm(g, out, imgw, imgh, imgc);
 
   pointFilter<<<gridSize, blockSize>>>(d_c, d_b, imgw, imgh, alpha);
 
