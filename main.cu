@@ -130,9 +130,7 @@ __global__ void pointFilter(int *out, int *img, int imgw, int imgh,
   float grey;
   if (line < imgh && col < imgw) {
     int idx = 3 * (line * imgw + col);
-    // if(threadIdx.x ==0&& threadIdx.y==0){
-    // printf(" ii r %d  g %d b %d \n", img[idx],img[idx+1], img[idx+2]);
-    //}
+
     r = img[idx];
     g = img[idx + 1];
     b = img[idx + 2];
@@ -182,8 +180,6 @@ int main(int argc, char *argv[]) {
   cudaMalloc(&d_a, 3 * imgw * imgh * sizeof(int));
   int *d_b;
   cudaMalloc(&d_b, 3 * imgw * imgh * sizeof(int));
-  int *d_c;
-  cudaMalloc(&d_c, 3 * imgw * imgh * sizeof(int));
 
   dim3 blockSize(32, 32); // Equivalent to dim3 blockSize(TX, TY, 1);
   int bx = (imgw + blockSize.x - 1) / blockSize.x;
@@ -199,9 +195,9 @@ int main(int argc, char *argv[]) {
 
   areaFilter<<<gridSize, blockSize>>>(d_b, d_a, imgw, imgh, d_filter);
 
-  pointFilter<<<gridSize, blockSize>>>(d_c, d_b, imgw, imgh, alpha);
+  pointFilter<<<gridSize, blockSize>>>(d_b, d_b, imgw, imgh, alpha);
 
-  cudaMemcpy(out, d_c, 3 * imgw * imgh * sizeof(int), cudaMemcpyDeviceToHost);
+  cudaMemcpy(out, d_b, 3 * imgw * imgh * sizeof(int), cudaMemcpyDeviceToHost);
   t = clock() - t;
   printf("time %f ms\n", t / (double)(CLOCKS_PER_SEC / 1000));
 
